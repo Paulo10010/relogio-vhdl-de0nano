@@ -1,0 +1,15 @@
+# Arquivos gerados pelo Quartus II (recriados a cada compilação)
+db/
+incremental_db/
+output_files/
+simulation/
+greybox_tmp/
+*.qws
+*.bak
+*.rpt
+*.summary
+*.smsg
+*.done
+*.sof
+*.pof
+*.jdi
