@@ -37,8 +37,9 @@ architecture behaviorOfTest of teste0 is
 signal seg,dseg : std_logic_vector(1 downto 0);
 signal saida: std_logic_vector(1 downto 0);
 signal saidaseg: std_logic_vector(5 downto 0);
-signal minUni, minDez: integer;
-signal horaUni, horaDez: integer;
+signal minUni, minDez: integer range 0 to 9;
+signal horaUni, horaDez: integer range 0 to 9;
+signal clk_min, clk_hora, fim_hora: std_logic; -- clocks em cascata dos minutos e horas
 signal horaBCDuni, minBCDUni,minBCDDez,horaBCDDez  : std_logic_vector (6 downto 0);
 signal rst_segundos: std_logic;
 signal configuracao: std_logic;
@@ -66,43 +67,43 @@ begin--PROGRAMAÇÂO... lembre-se a programação fica depois do begin da arquit
 --end if;
 --end if;
 --end process;
-process(saidaseg, configuracao)
+-- Mesmo conceito do contador de JKs: a saida de um estagio e o clock do proximo (borda de descida).
+-- saidaseg(5) fica em '1' de 32 a 59 segundos e cai na virada para 0 => tique do minuto.
+-- fim_hora fica em '1' de 50 a 59 minutos e cai na virada para 00 => tique da hora.
+-- No modo configuracao os botoes (ativos em '0') viram o clock.
+clk_min  <= saidaseg(5) when configuracao = '0' else minplus;
+fim_hora <= '1' when minDez = 5 else '0';
+clk_hora <= fim_hora when configuracao = '0' else horaplus;
+
+process(clk_min)
 begin
-	if configuracao = '0' then 
-		if saidaseg = "111100" then
-			minuni <= minuni + 1;
-		elsif minUni = 9 then 
+	if falling_edge(clk_min) then
+		if minUni = 9 then
 			minUni <= 0;
-			minDez <= minDez + 1;
-		elsif minDez = 6 then
-			minDez <= 0;
-			HoraUni <= HoraUni + 1;
-		elsif horaUni = 9 then
-		horaUni <= 0;
-		horaDez <= horaDez + 1;
-		elsif (horauni = 4) and (horaDez = 2) then 
+			if minDez = 5 then
+				minDez <= 0;
+			else
+				minDez <= minDez + 1;
+			end if;
+		else
+			minUni <= minUni + 1;
+		end if;
+	end if;
+end process;
+
+process(clk_hora)
+begin
+	if falling_edge(clk_hora) then
+		if (horaDez = 2) and (horaUni = 3) then
 			horaUni <= 0;
-			HoraDez <= 0;
-			
-	elsif configuracao= '1' then
-		if minplus = '0' then
-			minuni <= minuni + 1;
-		elsif minUni = 9 then 
-			minUni <= 0;
-			minDez <= minDez + 1;
-		elsif minDez = 6 then
-			minDez <= 0;
-		elsif horaplus = '0' then
-			horauni <= horauni + 1;
+			horaDez <= 0;
 		elsif horaUni = 9 then
-		horaUni <= 0;
-		horaDez <= horaDez + 1;
-		elsif (horauni = 4) and (horaDez = 2) then 
 			horaUni <= 0;
-			HoraDez <= 0;
-end if;
-end if;
-end if;
+			horaDez <= horaDez + 1;
+		else
+			horaUni <= horaUni + 1;
+		end if;
+	end if;
 end process;
 
 
@@ -122,9 +123,9 @@ port map (clk => clocK_50,frequencia => 400, pulso => seg(1));
 -- contador para a variaçao do display 7seg
 
 FLIP_FLOP0: entity work.Flip_Flop_JK							--OBS: O clock do flip flop é comandado pelo botão
-port map(J => '1', K => '1', Clk => seg(1), Clr => rst_segundos,	Q => saida(0));
+port map(J => '1', K => '1', Clk => seg(1), Clr => '1',	Q => saida(0));
 FLIP_FLOP1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saida(0),Clr => rst_segundos, Q => saida(1));
+port map(J => '1', K => '1', Clk => saida(0),Clr => '1', Q => saida(1));
 
 rst_segundos <= not (saidaseg(5) and saidaseg(4) and saidaseg(3) and saidaseg(2));
 -- contagem de 0 a 60.
@@ -153,21 +154,18 @@ port map (int => horaDez, seg => horaBCDDez);
 
 
 
-process(saida)
-
+process(saida, minBCDUni, minBCDDez, horaBCDuni, horaBCDDez)
 begin
-	if (saida = "00") then
-		d7seg(7 downto 1) <= minBCDUni;
-		
-	elsif (saida = "01") then 
-		d7seg(7 downto 1) <= minBCDDez;
-		
-	elsif (saida = "10") then 
-		d7seg(7 downto 1) <= horaBCDuni;
-		
-	elsif (saida = "11") then 
-		d7seg(7 downto 1) <= horaBCDDez;
-end if;
+	case saida is
+		when "00"   => d7seg(7 downto 1) <= minBCDUni;
+		when "01"   => d7seg(7 downto 1) <= minBCDDez;
+		when "10"   => d7seg(7 downto 1) <= horaBCDuni;
+		when others => d7seg(7 downto 1) <= horaBCDDez;
+	end case;
 end process;
+
+d7seg(8) <= '0'; -- bits nao usados (ajustar conforme a polaridade do kit)
+d7seg(0) <= '0';
+LED <= (others => '0');
 end behaviorOfTest;
 

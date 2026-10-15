@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 
 entity int_7seg is
     port (
-        int : in  integer;   -- digito BCD (0 a 9)
+        int : in  integer range 0 to 9;   -- digito BCD (0 a 9)
         seg : out std_logic_vector(6 downto 0)    -- "g f e d c b a"
     );
 end entity int_7seg;
