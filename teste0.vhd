@@ -56,23 +56,45 @@ signal horaDezPre, horaDezClr : std_logic_vector(1 downto 0);
 -- Condicoes de zerar a contagem (vira de 9->0, 5->0 e 23->00)
 signal zera_minUni, zera_minDez, zera_horaUni, zera_24h: std_logic;
 
--- '1' enquanto o botao de carga estiver pressionado
+-- '1' enquanto o botao de carga estiver pressionado (e a carga for permitida)
 signal carga_min, carga_hora: std_logic;
+
+-- Valor das chaves: unidade em 4 bits (0 a 9) e dezena em 3 bits (0 a 5 / 0 a 2)
+signal chave_uni: unsigned(3 downto 0);
+signal chave_dez: unsigned(2 downto 0);
+signal min_valido, hora_valido: std_logic;
 begin--PROGRAMAÇÂO... lembre-se a programação fica depois do begin da arquitetura...
 
 dig7seg <= saida;
 
 -- AJUSTE DA HORA POR PRESET
--- Chaves: ehkey(7..4) = dezena e ehkey(3..0) = unidade, em BCD.
--- Botao ehkey(8) carrega os minutos e ehkey(9) carrega as horas.
+-- Chaves: ehkey(6..4) = dezena (3 bits) e ehkey(3..0) = unidade (4 bits), em BCD.
+-- ehkey(7) nao e usada.
+-- Botao ehkey(8) carrega os minutos (MM) e ehkey(9) carrega as horas (HH):
+-- cada botao carrega a dezena E a unidade de uma vez.
 -- Botoes NF (normalmente fechados): '0' em repouso e '1' quando pressionados.
 -- Enquanto o botao esta pressionado, cada JK e forcado para o bit da sua chave:
 --   chave = '1' => Pre = '0' (Q vai para 1)
 --   chave = '0' => Clr = '0' (Q vai para 0)
 -- Ajuste primeiro os minutos e depois as horas (carregar os minutos pode gerar
 -- um tique na hora, que e sobrescrito na carga da hora).
-carga_min  <= ehkey(8);
-carga_hora <= ehkey(9);
+--
+-- INTERTRAVAMENTO:
+--  1) Os dois botoes juntos nao carregam nada (as chaves sao as mesmas para os dois).
+--  2) So carrega se o valor das chaves for valido: minutos 00 a 59, horas 00 a 23.
+--     Sem isso, um valor como 7x ou 25 faz o "zera" (Clr) brigar com o Pre
+--     e os digitos ficam oscilando/apagados.
+--  O LED(0) / LED(1) acende quando o botao dos minutos / horas esta pressionado
+--  mas a carga foi bloqueada.
+chave_uni <= unsigned(ehkey(3 downto 0));
+chave_dez <= unsigned(ehkey(6 downto 4));
+
+min_valido  <= '1' when chave_uni <= 9 and chave_dez <= 5 else '0';
+hora_valido <= '1' when (chave_dez <= 1 and chave_uni <= 9) or
+                        (chave_dez = 2  and chave_uni <= 3) else '0';
+
+carga_min  <= ehkey(8) and not ehkey(9) and min_valido;
+carga_hora <= ehkey(9) and not ehkey(8) and hora_valido;
 
 
 segundo: entity work.conta_1seg
@@ -194,5 +216,7 @@ end process;
 
 d7seg(8) <= '0'; -- bits nao usados (ajustar conforme a polaridade do kit)
 d7seg(0) <= '0';
-LED <= (others => '0');
+LED(0) <= ehkey(8) and not carga_min;  -- carga dos minutos bloqueada
+LED(1) <= ehkey(9) and not carga_hora; -- carga das horas bloqueada
+LED(7 downto 2) <= (others => '0');
 end behaviorOfTest;
