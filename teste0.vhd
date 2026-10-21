@@ -64,14 +64,15 @@ dig7seg <= saida;
 
 -- AJUSTE DA HORA POR PRESET
 -- Chaves: ehkey(7..4) = dezena e ehkey(3..0) = unidade, em BCD.
--- Botao ehkey(8) carrega os minutos e ehkey(9) carrega as horas (ativos em '0').
+-- Botao ehkey(8) carrega os minutos e ehkey(9) carrega as horas.
+-- Botoes NF (normalmente fechados): '0' em repouso e '1' quando pressionados.
 -- Enquanto o botao esta pressionado, cada JK e forcado para o bit da sua chave:
 --   chave = '1' => Pre = '0' (Q vai para 1)
 --   chave = '0' => Clr = '0' (Q vai para 0)
 -- Ajuste primeiro os minutos e depois as horas (carregar os minutos pode gerar
 -- um tique na hora, que e sobrescrito na carga da hora).
-carga_min  <= not ehkey(8);
-carga_hora <= not ehkey(9);
+carga_min  <= ehkey(8);
+carga_hora <= ehkey(9);
 
 
 segundo: entity work.conta_1seg

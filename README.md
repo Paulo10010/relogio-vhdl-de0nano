@@ -18,7 +18,7 @@ Relógio HH:MM para a placa DE0-Nano (Cyclone IV E — EP4CE22F17C6) com o kit d
 - **Segundos:** contador assíncrono com 6 flip-flops JK em cascata, zerado ao chegar em 60.
 - **Display:** 2 flip-flops JK a 400 Hz selecionam qual dos 4 dígitos é mostrado (multiplexação).
 - **Minutos/horas:** contadores assíncronos de flip-flops JK em BCD (unidade 0–9, dezena 0–5 / 0–2), cada estágio clocado pelo bit mais alto do anterior; zeram ao chegar em 10, 60 e 24.
-- **Ajuste (preset):** coloque o valor nas chaves em BCD — `ehkey(7..4)` = dezena, `ehkey(3..0)` = unidade. Pressione `ehkey(8)` para carregar os minutos (zera os segundos) e depois `ehkey(9)` para carregar as horas. Enquanto o botão está pressionado, cada JK recebe Pre='0' (chave em 1) ou Clr='0' (chave em 0).
+- **Ajuste (preset):** coloque o valor nas chaves em BCD — `ehkey(7..4)` = dezena, `ehkey(3..0)` = unidade. Pressione `ehkey(8)` (botão NF: '0' solto, '1' pressionado) para carregar os minutos (zera os segundos) e depois `ehkey(9)` para carregar as horas. Enquanto o botão está pressionado, cada JK recebe Pre='0' (chave em 1) ou Clr='0' (chave em 0).
 
 ## Como compilar
 
