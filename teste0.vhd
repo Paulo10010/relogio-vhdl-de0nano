@@ -72,7 +72,7 @@ dig7seg <= saida;
 
 -- AJUSTE DA HORA POR PRESET
 -- Chaves: ehkey(6..4) = dezena (3 bits) e ehkey(3..0) = unidade (4 bits), em BCD.
--- ehkey(7) nao e usada.
+-- ehkey(7) = habilita o ajuste ('1' = ajuste liberado).
 -- Botao ehkey(8) carrega os minutos (MM) e ehkey(9) carrega as horas (HH):
 -- cada botao carrega a dezena E a unidade de uma vez.
 -- Botoes NF (normalmente fechados): '1' em repouso e '0' quando apertados.
@@ -83,6 +83,7 @@ dig7seg <= saida;
 -- um tique na hora, que e sobrescrito na carga da hora).
 --
 -- INTERTRAVAMENTO:
+--  0) So carrega com a chave ehkey(7) ligada; desligada, os botoes nao fazem nada.
 --  1) Os dois botoes juntos nao carregam nada (as chaves sao as mesmas para os dois).
 --  2) So carrega se o valor das chaves for valido: minutos 00 a 59, horas 00 a 23.
 --     Sem isso, um valor como 7x ou 25 faz o "zera" (Clr) brigar com o Pre
@@ -99,8 +100,8 @@ hora_valido <= '1' when (chave_dez <= 1 and chave_uni <= 9) or
 bot_min  <= not ehkey(8);
 bot_hora <= not ehkey(9);
 
-carga_min  <= bot_min  and not bot_hora and min_valido;
-carga_hora <= bot_hora and not bot_min  and hora_valido;
+carga_min  <= ehkey(7) and bot_min  and not bot_hora and min_valido;
+carga_hora <= ehkey(7) and bot_hora and not bot_min  and hora_valido;
 
 
 segundo: entity work.conta_1seg
