@@ -10,6 +10,7 @@ entity Flip_Flop_JK is
 	J,K  : in std_logic;
 	Clk: in std_logic;
 	Clr: in std_logic;
+	Pre: in std_logic := '1'; -- preset assincrono ativo em '0' (opcional)
 	Q  : out std_logic
 	);
 end Flip_Flop_JK;
@@ -18,10 +19,12 @@ architecture behaviorOfTest of Flip_Flop_JK is
 signal Q_ref: std_logic;
 begin
 
-process(Clk,Clr)
+process(Clk,Clr,Pre)
 begin
 if Clr = '0' then         -- Reset assíncrono acionado
             Q_ref <= '0';
+elsif Pre = '0' then      -- Preset assíncrono acionado
+            Q_ref <= '1';
 elsif falling_edge(Clk) then
 	if J='1' and K='0' then
 	Q_ref<='1';

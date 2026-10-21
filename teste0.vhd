@@ -8,23 +8,23 @@ entity teste0 is
 	(
 	   -- ENTRADAS FISICAS!
 		-- Obs:Não existe necessidade de modificar nada aqui!!!
-		
+
 		--DE0Nano
-		-- Input ports 
+		-- Input ports
 		CLOCK_50 : in std_logic; -- Oscilador
 		KEY : in std_logic_vector( 1 downto 0); --Botões que ficam na placa DE0-nano
-		
+
 		--output ports
 		LED : out std_logic_vector(7 downto 0); --LEDS que ficam na placa DEO-nano
 
 		--Expansion Header UFPE/DES kit
 		-- input ports
 		ehkey : in std_logic_vector(9 downto 0);-- bits 0-7=>chaves; bits 8 e 9 => pushbutton
-		
+
 		-- output ports
 		dig7seg : out std_logic_vector(1 downto 0); -- Seletor do display
 		d7seg : out std_logic_vector(8 downto 0) -- Indicator de 7seg selecionado por dig7seg
-		
+
 	);
 end teste0;
 
@@ -37,81 +37,41 @@ architecture behaviorOfTest of teste0 is
 signal seg,dseg : std_logic_vector(1 downto 0);
 signal saida: std_logic_vector(1 downto 0);
 signal saidaseg: std_logic_vector(5 downto 0);
-signal minUni, minDez: integer range 0 to 9;
-signal horaUni, horaDez: integer range 0 to 9;
-signal clk_min, clk_hora, fim_hora: std_logic; -- clocks em cascata dos minutos e horas
 signal horaBCDuni, minBCDUni,minBCDDez,horaBCDDez  : std_logic_vector (6 downto 0);
 signal rst_segundos: std_logic;
-signal configuracao: std_logic;
-signal horaplus, minplus: std_logic;
+
+-- Saidas (Q) dos JKs de cada digito, em BCD
+signal minUni  : std_logic_vector(3 downto 0); -- 0 a 9
+signal minDez  : std_logic_vector(2 downto 0); -- 0 a 5
+signal horaUni : std_logic_vector(3 downto 0); -- 0 a 9
+signal horaDez : std_logic_vector(1 downto 0); -- 0 a 2
+signal minUni4, minDez4, horaUni4, horaDez4: std_logic_vector(3 downto 0); -- digitos em 4 bits para o bin_7seg
+
+-- Preset e clear (ativos em '0') de cada JK
+signal minUniPre,  minUniClr  : std_logic_vector(3 downto 0);
+signal minDezPre,  minDezClr  : std_logic_vector(2 downto 0);
+signal horaUniPre, horaUniClr : std_logic_vector(3 downto 0);
+signal horaDezPre, horaDezClr : std_logic_vector(1 downto 0);
+
+-- Condicoes de zerar a contagem (vira de 9->0, 5->0 e 23->00)
+signal zera_minUni, zera_minDez, zera_horaUni, zera_24h: std_logic;
+
+-- '1' enquanto o botao de carga estiver pressionado
+signal carga_min, carga_hora: std_logic;
 begin--PROGRAMAÇÂO... lembre-se a programação fica depois do begin da arquitetura...
 
---process(configuracao)
---begin
---	if configuracao= '1' then
---		if minplus = '0' then
---			minuni <= minuni + 1;
---		elsif minUni = 9 then 
---			minUni <= 0;
---			minDez <= minDez + 1;
---		elsif minDez = 6 then
---			minDez <= 0;
---		elsif horaplus = '0' then
---			horauni <= horauni + 1;
---		elsif horaUni = 9 then
---		horaUni <= 0;
---		horaDez <= horaDez + 1;
---		elsif (horauni = 4) and (horaDez = 2) then 
---			horaUni <= 0;
---			HoraDez <= 0;
---end if;
---end if;
---end process;
--- Mesmo conceito do contador de JKs: a saida de um estagio e o clock do proximo (borda de descida).
--- saidaseg(5) fica em '1' de 32 a 59 segundos e cai na virada para 0 => tique do minuto.
--- fim_hora fica em '1' de 50 a 59 minutos e cai na virada para 00 => tique da hora.
--- No modo configuracao os botoes (ativos em '0') viram o clock.
-clk_min  <= saidaseg(5) when configuracao = '0' else minplus;
-fim_hora <= '1' when minDez = 5 else '0';
-clk_hora <= fim_hora when configuracao = '0' else horaplus;
-
-process(clk_min)
-begin
-	if falling_edge(clk_min) then
-		if minUni = 9 then
-			minUni <= 0;
-			if minDez = 5 then
-				minDez <= 0;
-			else
-				minDez <= minDez + 1;
-			end if;
-		else
-			minUni <= minUni + 1;
-		end if;
-	end if;
-end process;
-
-process(clk_hora)
-begin
-	if falling_edge(clk_hora) then
-		if (horaDez = 2) and (horaUni = 3) then
-			horaUni <= 0;
-			horaDez <= 0;
-		elsif horaUni = 9 then
-			horaUni <= 0;
-			horaDez <= horaDez + 1;
-		else
-			horaUni <= horaUni + 1;
-		end if;
-	end if;
-end process;
-
-
-
 dig7seg <= saida;
-configuracao <= ehkey(7);
-minplus <= ehkey(8);
-horaplus <= ehkey(9);
+
+-- AJUSTE DA HORA POR PRESET
+-- Chaves: ehkey(7..4) = dezena e ehkey(3..0) = unidade, em BCD.
+-- Botao ehkey(8) carrega os minutos e ehkey(9) carrega as horas (ativos em '0').
+-- Enquanto o botao esta pressionado, cada JK e forcado para o bit da sua chave:
+--   chave = '1' => Pre = '0' (Q vai para 1)
+--   chave = '0' => Clr = '0' (Q vai para 0)
+-- Ajuste primeiro os minutos e depois as horas (carregar os minutos pode gerar
+-- um tique na hora, que e sobrescrito na carga da hora).
+carga_min  <= not ehkey(8);
+carga_hora <= not ehkey(9);
 
 
 segundo: entity work.conta_1seg
@@ -127,30 +87,97 @@ port map(J => '1', K => '1', Clk => seg(1), Clr => '1',	Q => saida(0));
 FLIP_FLOP1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saida(0),Clr => '1', Q => saida(1));
 
-rst_segundos <= not (saidaseg(5) and saidaseg(4) and saidaseg(3) and saidaseg(2));
+-- Os segundos zeram ao chegar em 60 e tambem durante a carga dos minutos.
+rst_segundos <= not ((saidaseg(5) and saidaseg(4) and saidaseg(3) and saidaseg(2)) or carga_min);
 -- contagem de 0 a 60.
-segundoC0: entity work.Flip_Flop_JK							
+segundoC0: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => seg(0), Clr => rst_segundos,	Q => saidaseg(0));
-segundoC1: entity work.Flip_Flop_JK							
+segundoC1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saidaseg(0), Clr => rst_segundos,	Q => saidaseg(1));
-segundoC2: entity work.Flip_Flop_JK							
+segundoC2: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saidaseg(1), Clr => rst_segundos,	Q => saidaseg(2));
-segundoC3: entity work.Flip_Flop_JK							
+segundoC3: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saidaseg(2), Clr => rst_segundos, 	Q => saidaseg(3));
-segundoC4: entity work.Flip_Flop_JK							
+segundoC4: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saidaseg(3), Clr => rst_segundos,	Q => saidaseg(4));
-segundoC5: entity work.Flip_Flop_JK							
+segundoC5: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saidaseg(4), Clr => rst_segundos,	Q => saidaseg(5));
 
-BCDminUni: entity work.int_7seg
-port map (int => minuni, seg => minBCDUni);
-BCDminDez: entity work.int_7seg
-port map (int => mindez, seg => minBCDDez);
 
-BCDhorauni: entity work.int_7seg
-port map (int => horauni, seg => horaBCDuni);
-BCDhoradez: entity work.int_7seg
-port map (int => horaDez, seg => horaBCDDez);
+-- UNIDADE DOS MINUTOS: 0 a 9, clock = saidaseg(5) (cai na virada 59 -> 0 s)
+zera_minUni <= minUni(3) and minUni(1); -- chegou em 10
+PRESET_MINUNI: for i in 0 to 3 generate
+	minUniPre(i) <= not (carga_min and ehkey(i));
+	minUniClr(i) <= not ((carga_min and not ehkey(i)) or zera_minUni);
+end generate;
+
+minUniC0: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => saidaseg(5), Clr => minUniClr(0), Pre => minUniPre(0), Q => minUni(0));
+minUniC1: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minUni(0),   Clr => minUniClr(1), Pre => minUniPre(1), Q => minUni(1));
+minUniC2: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minUni(1),   Clr => minUniClr(2), Pre => minUniPre(2), Q => minUni(2));
+minUniC3: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minUni(2),   Clr => minUniClr(3), Pre => minUniPre(3), Q => minUni(3));
+
+-- DEZENA DOS MINUTOS: 0 a 5, clock = minUni(3) (cai na virada 9 -> 0)
+zera_minDez <= minDez(2) and minDez(1); -- chegou em 6
+PRESET_MINDEZ: for i in 0 to 2 generate
+	minDezPre(i) <= not (carga_min and ehkey(i+4));
+	minDezClr(i) <= not ((carga_min and not ehkey(i+4)) or zera_minDez);
+end generate;
+
+minDezC0: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minUni(3), Clr => minDezClr(0), Pre => minDezPre(0), Q => minDez(0));
+minDezC1: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minDez(0), Clr => minDezClr(1), Pre => minDezPre(1), Q => minDez(1));
+minDezC2: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minDez(1), Clr => minDezClr(2), Pre => minDezPre(2), Q => minDez(2));
+
+-- UNIDADE DAS HORAS: 0 a 9, clock = minDez(2) (cai na virada 59 -> 00 min)
+zera_24h     <= horaDez(1) and horaUni(2); -- chegou em 24
+zera_horaUni <= (horaUni(3) and horaUni(1)) or zera_24h; -- chegou em 10 ou 24
+PRESET_HORAUNI: for i in 0 to 3 generate
+	horaUniPre(i) <= not (carga_hora and ehkey(i));
+	horaUniClr(i) <= not ((carga_hora and not ehkey(i)) or zera_horaUni);
+end generate;
+
+horaUniC0: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minDez(2),  Clr => horaUniClr(0), Pre => horaUniPre(0), Q => horaUni(0));
+horaUniC1: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => horaUni(0), Clr => horaUniClr(1), Pre => horaUniPre(1), Q => horaUni(1));
+horaUniC2: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => horaUni(1), Clr => horaUniClr(2), Pre => horaUniPre(2), Q => horaUni(2));
+horaUniC3: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => horaUni(2), Clr => horaUniClr(3), Pre => horaUniPre(3), Q => horaUni(3));
+
+-- DEZENA DAS HORAS: 0 a 2, clock = horaUni(3) (cai na virada 9 -> 0)
+PRESET_HORADEZ: for i in 0 to 1 generate
+	horaDezPre(i) <= not (carga_hora and ehkey(i+4));
+	horaDezClr(i) <= not ((carga_hora and not ehkey(i+4)) or zera_24h);
+end generate;
+
+horaDezC0: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => horaUni(3), Clr => horaDezClr(0), Pre => horaDezPre(0), Q => horaDez(0));
+horaDezC1: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => horaDez(0), Clr => horaDezClr(1), Pre => horaDezPre(1), Q => horaDez(1));
+
+
+-- Digitos para o display (bin_7seg apaga o digito se o valor for invalido)
+minUni4  <= minUni;
+minDez4  <= '0' & minDez;
+horaUni4 <= horaUni;
+horaDez4 <= "00" & horaDez;
+
+BCDminUni: entity work.bin_7seg
+port map (bin => minUni4, seg => minBCDUni);
+BCDminDez: entity work.bin_7seg
+port map (bin => minDez4, seg => minBCDDez);
+
+BCDhorauni: entity work.bin_7seg
+port map (bin => horaUni4, seg => horaBCDuni);
+BCDhoradez: entity work.bin_7seg
+port map (bin => horaDez4, seg => horaBCDDez);
 
 
 
@@ -168,4 +195,3 @@ d7seg(8) <= '0'; -- bits nao usados (ajustar conforme a polaridade do kit)
 d7seg(0) <= '0';
 LED <= (others => '0');
 end behaviorOfTest;
-
