@@ -47,61 +47,56 @@ signal horaUni : std_logic_vector(3 downto 0); -- 0 a 9
 signal horaDez : std_logic_vector(1 downto 0); -- 0 a 2
 signal minUni4, minDez4, horaUni4, horaDez4: std_logic_vector(3 downto 0); -- digitos em 4 bits para o bin_7seg
 
--- Preset e clear (ativos em '0') de cada JK
-signal minUniPre,  minUniClr  : std_logic_vector(3 downto 0);
-signal minDezPre,  minDezClr  : std_logic_vector(2 downto 0);
-signal horaUniPre, horaUniClr : std_logic_vector(3 downto 0);
-signal horaDezPre, horaDezClr : std_logic_vector(1 downto 0);
+-- Clear (ativo em '0') de cada JK
+signal minUniClr  : std_logic_vector(3 downto 0);
+signal minDezClr  : std_logic_vector(2 downto 0);
+signal horaUniClr : std_logic_vector(3 downto 0);
+signal horaDezClr : std_logic_vector(1 downto 0);
 
 -- Condicoes de zerar a contagem (vira de 9->0, 5->0 e 23->00)
-signal zera_minUni, zera_minDez, zera_horaUni, zera_24h: std_logic;
+signal zera_minUni, zera_minDez, zera_24h: std_logic;
+signal zera_horaUni: std_logic;
 
--- '1' enquanto o botao de carga estiver pressionado (e a carga for permitida)
-signal carga_min, carga_hora: std_logic;
-
--- '1' enquanto o botao estiver apertado (botoes NF: ehkey = '0' quando apertado)
-signal bot_min, bot_hora: std_logic;
-
--- Valor das chaves: unidade em 4 bits (0 a 9) e dezena em 3 bits (0 a 5 / 0 a 2)
-signal chave_uni: unsigned(3 downto 0);
-signal chave_dez: unsigned(2 downto 0);
-signal min_valido, hora_valido: std_logic;
+-- Botoes ehkey(8)/ehkey(9) depois do debounce
+signal bot_min_db, bot_hora_db: std_logic;       -- nivel filtrado ('0' = apertado)
+signal apertou_min, apertou_hora: std_logic;     -- pulso na borda 1 -> 0
+-- Pulsos de incremento (1 ciclo de 50 MHz), so com o ajuste habilitado
+signal inc_min, inc_hora: std_logic := '0';
+-- Clock da unidade dos minutos/horas: contagem normal XOR pulso de incremento
+signal clk_minUni, clk_horaUni: std_logic;
 begin--PROGRAMAÇÂO... lembre-se a programação fica depois do begin da arquitetura...
 
 dig7seg <= saida;
 
--- AJUSTE DA HORA POR PRESET
--- Chaves: ehkey(6..4) = dezena (3 bits) e ehkey(3..0) = unidade (4 bits), em BCD.
--- ehkey(7) = habilita o ajuste ('1' = ajuste liberado).
--- Botao ehkey(8) carrega os minutos (MM) e ehkey(9) carrega as horas (HH):
--- cada botao carrega a dezena E a unidade de uma vez.
+-- AJUSTE DA HORA POR INCREMENTO
+-- ehkey(7) = habilita o ajuste ('1' = ajuste liberado; os segundos ficam parados em 00).
 -- Botoes NF (normalmente fechados): '1' em repouso e '0' quando apertados.
--- Enquanto o botao esta pressionado, cada JK e forcado para o bit da sua chave:
---   chave = '1' => Pre = '0' (Q vai para 1)
---   chave = '0' => Clr = '0' (Q vai para 0)
--- Ajuste primeiro os minutos e depois as horas (carregar os minutos pode gerar
--- um tique na hora, que e sobrescrito na carga da hora).
+-- Cada aperto (borda 1 -> 0) de ehkey(8) soma 1 na unidade dos minutos e
+-- cada aperto de ehkey(9) soma 1 na unidade das horas. Os limites sao os do
+-- proprio contador: minutos 59 -> 00 e horas 23 -> 00.
+-- Obs: como o incremento entra no contador normal, os minutos virando 59 -> 00
+-- tambem somam 1 na hora (igual a contagem do relogio).
 --
--- INTERTRAVAMENTO:
---  0) So carrega com a chave ehkey(7) ligada; desligada, os botoes nao fazem nada.
---  1) Os dois botoes juntos nao carregam nada (as chaves sao as mesmas para os dois).
---  2) So carrega se o valor das chaves for valido: minutos 00 a 59, horas 00 a 23.
---     Sem isso, um valor como 7x ou 25 faz o "zera" (Clr) brigar com o Pre
---     e os digitos ficam oscilando/apagados.
---  O LED(0) / LED(1) acende quando o botao dos minutos / horas esta pressionado
---  mas a carga foi bloqueada.
-chave_uni <= unsigned(ehkey(3 downto 0));
-chave_dez <= unsigned(ehkey(6 downto 4));
+-- DEBOUNCE: os dois botoes passam por um filtro de 10 ms (debounce.vhd), entao
+-- o bouncing do contato nao gera varios incrementos num aperto so.
+DEB_MIN: entity work.debounce
+port map (clk => CLOCK_50, entrada => ehkey(8), saida => bot_min_db,  apertou => apertou_min);
+DEB_HORA: entity work.debounce
+port map (clk => CLOCK_50, entrada => ehkey(9), saida => bot_hora_db, apertou => apertou_hora);
 
-min_valido  <= '1' when chave_uni <= 9 and chave_dez <= 5 else '0';
-hora_valido <= '1' when (chave_dez <= 1 and chave_uni <= 9) or
-                        (chave_dez = 2  and chave_uni <= 3) else '0';
+-- Pulso de incremento registrado (sem glitch) e liberado so com ehkey(7) = '1'
+process(CLOCK_50)
+begin
+	if rising_edge(CLOCK_50) then
+		inc_min  <= apertou_min  and ehkey(7);
+		inc_hora <= apertou_hora and ehkey(7);
+	end if;
+end process;
 
-bot_min  <= not ehkey(8);
-bot_hora <= not ehkey(9);
-
-carga_min  <= ehkey(7) and bot_min  and not bot_hora and min_valido;
-carga_hora <= ehkey(7) and bot_hora and not bot_min  and hora_valido;
+-- O pulso de incremento (0 -> 1 -> 0) passado por XOR no clock gera exatamente
+-- uma borda de descida, seja qual for o nivel do clock normal naquele momento.
+clk_minUni  <= saidaseg(5) xor inc_min;
+clk_horaUni <= minDez(2)   xor inc_hora;
 
 
 segundo: entity work.conta_1seg
@@ -117,8 +112,8 @@ port map(J => '1', K => '1', Clk => seg(1), Clr => '1',	Q => saida(0));
 FLIP_FLOP1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saida(0),Clr => '1', Q => saida(1));
 
--- Os segundos zeram ao chegar em 60 e tambem durante a carga dos minutos.
-rst_segundos <= not ((saidaseg(5) and saidaseg(4) and saidaseg(3) and saidaseg(2)) or carga_min);
+-- Os segundos zeram ao chegar em 60 e ficam parados em 00 durante o ajuste.
+rst_segundos <= not ((saidaseg(5) and saidaseg(4) and saidaseg(3) and saidaseg(2)) or ehkey(7));
 -- contagem de 0 a 60.
 segundoC0: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => seg(0), Clr => rst_segundos,	Q => saidaseg(0));
@@ -134,63 +129,51 @@ segundoC5: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saidaseg(4), Clr => rst_segundos,	Q => saidaseg(5));
 
 
--- UNIDADE DOS MINUTOS: 0 a 9, clock = saidaseg(5) (cai na virada 59 -> 0 s)
+-- UNIDADE DOS MINUTOS: 0 a 9, clock = saidaseg(5) (cai na virada 59 -> 0 s) ou aperto de ehkey(8)
 zera_minUni <= minUni(3) and minUni(1); -- chegou em 10
-PRESET_MINUNI: for i in 0 to 3 generate
-	minUniPre(i) <= not (carga_min and ehkey(i));
-	minUniClr(i) <= not ((carga_min and not ehkey(i)) or zera_minUni);
-end generate;
+minUniClr <= (others => not zera_minUni);
 
 minUniC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saidaseg(5), Clr => minUniClr(0), Pre => minUniPre(0), Q => minUni(0));
+port map(J => '1', K => '1', Clk => clk_minUni,  Clr => minUniClr(0), Q => minUni(0));
 minUniC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(0),   Clr => minUniClr(1), Pre => minUniPre(1), Q => minUni(1));
+port map(J => '1', K => '1', Clk => minUni(0),   Clr => minUniClr(1), Q => minUni(1));
 minUniC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(1),   Clr => minUniClr(2), Pre => minUniPre(2), Q => minUni(2));
+port map(J => '1', K => '1', Clk => minUni(1),   Clr => minUniClr(2), Q => minUni(2));
 minUniC3: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(2),   Clr => minUniClr(3), Pre => minUniPre(3), Q => minUni(3));
+port map(J => '1', K => '1', Clk => minUni(2),   Clr => minUniClr(3), Q => minUni(3));
 
 -- DEZENA DOS MINUTOS: 0 a 5, clock = minUni(3) (cai na virada 9 -> 0)
 zera_minDez <= minDez(2) and minDez(1); -- chegou em 6
-PRESET_MINDEZ: for i in 0 to 2 generate
-	minDezPre(i) <= not (carga_min and ehkey(i+4));
-	minDezClr(i) <= not ((carga_min and not ehkey(i+4)) or zera_minDez);
-end generate;
+minDezClr <= (others => not zera_minDez);
 
 minDezC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(3), Clr => minDezClr(0), Pre => minDezPre(0), Q => minDez(0));
+port map(J => '1', K => '1', Clk => minUni(3), Clr => minDezClr(0), Q => minDez(0));
 minDezC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minDez(0), Clr => minDezClr(1), Pre => minDezPre(1), Q => minDez(1));
+port map(J => '1', K => '1', Clk => minDez(0), Clr => minDezClr(1), Q => minDez(1));
 minDezC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minDez(1), Clr => minDezClr(2), Pre => minDezPre(2), Q => minDez(2));
+port map(J => '1', K => '1', Clk => minDez(1), Clr => minDezClr(2), Q => minDez(2));
 
--- UNIDADE DAS HORAS: 0 a 9, clock = minDez(2) (cai na virada 59 -> 00 min)
+-- UNIDADE DAS HORAS: 0 a 9, clock = minDez(2) (cai na virada 59 -> 00 min) ou aperto de ehkey(9)
 zera_24h     <= horaDez(1) and horaUni(2); -- chegou em 24
 zera_horaUni <= (horaUni(3) and horaUni(1)) or zera_24h; -- chegou em 10 ou 24
-PRESET_HORAUNI: for i in 0 to 3 generate
-	horaUniPre(i) <= not (carga_hora and ehkey(i));
-	horaUniClr(i) <= not ((carga_hora and not ehkey(i)) or zera_horaUni);
-end generate;
+horaUniClr <= (others => not zera_horaUni);
 
 horaUniC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minDez(2),  Clr => horaUniClr(0), Pre => horaUniPre(0), Q => horaUni(0));
+port map(J => '1', K => '1', Clk => clk_horaUni, Clr => horaUniClr(0), Q => horaUni(0));
 horaUniC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => horaUni(0), Clr => horaUniClr(1), Pre => horaUniPre(1), Q => horaUni(1));
+port map(J => '1', K => '1', Clk => horaUni(0), Clr => horaUniClr(1), Q => horaUni(1));
 horaUniC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => horaUni(1), Clr => horaUniClr(2), Pre => horaUniPre(2), Q => horaUni(2));
+port map(J => '1', K => '1', Clk => horaUni(1), Clr => horaUniClr(2), Q => horaUni(2));
 horaUniC3: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => horaUni(2), Clr => horaUniClr(3), Pre => horaUniPre(3), Q => horaUni(3));
+port map(J => '1', K => '1', Clk => horaUni(2), Clr => horaUniClr(3), Q => horaUni(3));
 
 -- DEZENA DAS HORAS: 0 a 2, clock = horaUni(3) (cai na virada 9 -> 0)
-PRESET_HORADEZ: for i in 0 to 1 generate
-	horaDezPre(i) <= not (carga_hora and ehkey(i+4));
-	horaDezClr(i) <= not ((carga_hora and not ehkey(i+4)) or zera_24h);
-end generate;
+horaDezClr <= (others => not zera_24h);
 
 horaDezC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => horaUni(3), Clr => horaDezClr(0), Pre => horaDezPre(0), Q => horaDez(0));
+port map(J => '1', K => '1', Clk => horaUni(3), Clr => horaDezClr(0), Q => horaDez(0));
 horaDezC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => horaDez(0), Clr => horaDezClr(1), Pre => horaDezPre(1), Q => horaDez(1));
+port map(J => '1', K => '1', Clk => horaDez(0), Clr => horaDezClr(1), Q => horaDez(1));
 
 
 -- Digitos para o display (bin_7seg apaga o digito se o valor for invalido)
@@ -223,7 +206,7 @@ end process;
 
 d7seg(8) <= '0'; -- bits nao usados (ajustar conforme a polaridade do kit)
 d7seg(0) <= '0';
-LED(0) <= bot_min  and not carga_min;  -- carga dos minutos bloqueada
-LED(1) <= bot_hora and not carga_hora; -- carga das horas bloqueada
+LED(0) <= not bot_min_db;  -- botao dos minutos apertado (ja filtrado)
+LED(1) <= not bot_hora_db; -- botao das horas apertado (ja filtrado)
 LED(7 downto 2) <= (others => '0');
 end behaviorOfTest;
