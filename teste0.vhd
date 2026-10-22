@@ -57,10 +57,10 @@ signal horaDezClr : std_logic_vector(1 downto 0);
 signal zera_minUni, zera_minDez, zera_24h: std_logic;
 signal zera_horaUni: std_logic;
 
--- Botoes ehkey(8)/ehkey(9) depois do debounce
-signal bot_min_db, bot_hora_db: std_logic;       -- nivel filtrado ('0' = apertado)
-signal apertou_min, apertou_hora: std_logic;     -- pulso na borda 1 -> 0
--- Pulsos de incremento (1 ciclo de 50 MHz), so com o ajuste habilitado
+-- Botoes ehkey(8)/ehkey(9) pós filtro
+signal bot_min_db, bot_hora_db: std_logic;       
+signal apertou_min, apertou_hora: std_logic;     
+
 signal inc_min, inc_hora: std_logic := '0';
 -- Clock da unidade dos minutos/horas: contagem normal XOR pulso de incremento
 signal clk_minUni, clk_horaUni: std_logic;
@@ -68,17 +68,7 @@ begin--PROGRAMAÇÂO... lembre-se a programação fica depois do begin da arquit
 
 dig7seg <= saida;
 
--- AJUSTE DA HORA POR INCREMENTO
--- ehkey(7) = habilita o ajuste ('1' = ajuste liberado; os segundos ficam parados em 00).
--- Botoes NF (normalmente fechados): '1' em repouso e '0' quando apertados.
--- Cada aperto (borda 1 -> 0) de ehkey(8) soma 1 na unidade dos minutos e
--- cada aperto de ehkey(9) soma 1 na unidade das horas. Os limites sao os do
--- proprio contador: minutos 59 -> 00 e horas 23 -> 00.
--- Obs: como o incremento entra no contador normal, os minutos virando 59 -> 00
--- tambem somam 1 na hora (igual a contagem do relogio).
---
--- DEBOUNCE: os dois botoes passam por um filtro de 10 ms (debounce.vhd), entao
--- o bouncing do contato nao gera varios incrementos num aperto so.
+
 DEB_MIN: entity work.debounce
 port map (clk => CLOCK_50, entrada => ehkey(8), saida => bot_min_db,  apertou => apertou_min);
 DEB_HORA: entity work.debounce
@@ -93,8 +83,8 @@ begin
 	end if;
 end process;
 
--- O pulso de incremento (0 -> 1 -> 0) passado por XOR no clock gera exatamente
--- uma borda de descida, seja qual for o nivel do clock normal naquele momento.
+-- O pulso de incremento passado por XOR no clock gera exatamente
+-- uma borda de descida, no caso essa borda depois é utilizada no FF min e hora em cascata presente.
 clk_minUni  <= saidaseg(5) xor inc_min;
 clk_horaUni <= minDez(2)   xor inc_hora;
 
@@ -107,7 +97,7 @@ port map (clk => clocK_50,frequencia => 400, pulso => seg(1));
 
 -- contador para a variaçao do display 7seg
 
-FLIP_FLOP0: entity work.Flip_Flop_JK							--OBS: O clock do flip flop é comandado pelo botão
+FLIP_FLOP0: entity work.Flip_Flop_JK							
 port map(J => '1', K => '1', Clk => seg(1), Clr => '1',	Q => saida(0));
 FLIP_FLOP1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saida(0),Clr => '1', Q => saida(1));
@@ -176,7 +166,7 @@ horaDezC1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => horaDez(0), Clr => horaDezClr(1), Q => horaDez(1));
 
 
--- Digitos para o display (bin_7seg apaga o digito se o valor for invalido)
+-- Digitos para o display (bin_7seg apaga o digito se o valor for invalido, e ajusta para todos os vetores possuam 4 bits.
 minUni4  <= minUni;
 minDez4  <= '0' & minDez;
 horaUni4 <= horaUni;
@@ -197,16 +187,11 @@ port map (bin => horaDez4, seg => horaBCDDez);
 process(saida, minBCDUni, minBCDDez, horaBCDuni, horaBCDDez)
 begin
 	case saida is
-		when "00"   => d7seg(7 downto 1) <= minBCDUni;
+		when "00"   => d7seg(7 downto 1) <= horaBCDDez;
 		when "01"   => d7seg(7 downto 1) <= minBCDDez;
 		when "10"   => d7seg(7 downto 1) <= horaBCDuni;
-		when others => d7seg(7 downto 1) <= horaBCDDez;
+		when others => d7seg(7 downto 1) <= minBCDUni;
 	end case;
 end process;
 
-d7seg(8) <= '0'; -- bits nao usados (ajustar conforme a polaridade do kit)
-d7seg(0) <= '0';
-LED(0) <= not bot_min_db;  -- botao dos minutos apertado (ja filtrado)
-LED(1) <= not bot_hora_db; -- botao das horas apertado (ja filtrado)
-LED(7 downto 2) <= (others => '0');
 end behaviorOfTest;
