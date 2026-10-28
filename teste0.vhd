@@ -64,6 +64,7 @@ signal apertou_min, apertou_hora: std_logic;
 signal inc_min, inc_hora: std_logic := '0';
 -- Clock da unidade dos minutos/horas: contagem normal XOR pulso de incremento
 signal clk_minUni, clk_horaUni: std_logic;
+
 begin--PROGRAMAÇÂO... lembre-se a programação fica depois do begin da arquitetura...
 
 dig7seg <= saida;
