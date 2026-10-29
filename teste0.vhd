@@ -3,7 +3,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
-entity teste1 is
+entity teste0 is
 	port
 	(
 	   -- ENTRADAS FISICAS!
@@ -26,25 +26,23 @@ entity teste1 is
 		d7seg : out std_logic_vector(8 downto 0) -- Indicator de 7seg selecionado por dig7seg
 
 	);
-end teste1;
+end teste0;
 
 
-architecture behaviorOfTest of teste1 is
+architecture behaviorOfTest of teste0 is
 --Colocar aqui todas os sinais que deseja utilizar("equivalentes a variaveis auxiliares")
 --Exemplos de declaração de sinal:
 --signal var_auxiliar: std_logic;
 --signal vars_auxiliares: std_logic_vector(3 downto 0);
 signal seg,dseg : std_logic_vector(1 downto 0);
 signal saida: std_logic_vector(1 downto 0);
-signal saidaseg: std_logic_vector(5 downto 0);
 signal minBCDuni, segBCDUni,segBCDDez,minBCDDez  : std_logic_vector (6 downto 0);
-signal rst_segundos: std_logic;
 
 -- Saidas (Q) dos JKs de cada digito, em BCD
 signal segUni  : std_logic_vector(3 downto 0); -- 0 a 9
 signal segDez  : std_logic_vector(2 downto 0); -- 0 a 5
 signal minUni : std_logic_vector(3 downto 0); -- 0 a 9
-signal minDez : std_logic_vector(2 downto 0); -- 0 a 6
+signal minDez : std_logic_vector(2 downto 0); -- 0 a 5
 signal segUni4, segDez4, minUni4, minDez4: std_logic_vector(3 downto 0); -- digitos em 4 bits para o bin_7seg
 
 -- Clear (ativo em '0') de cada JK
@@ -53,7 +51,7 @@ signal segDezClr  : std_logic;
 signal minUniClr : std_logic;
 signal minDezClr : std_logic;
 
--- Condicoes de zerar a contagem (vira de 9->0, 5->0 e 23->00)
+-- Condicoes de zerar a contagem (vira de 9->0 e 5->0)
 signal zera_segUni, zera_segDez, zera_minUni, zera_minDez: std_logic := '0';
 
 -- Botoes ehkey(8)/ehkey(9) pós filtro
@@ -61,6 +59,8 @@ signal bot_seg_db, bot_min_db: std_logic;
 signal apertou_seg, apertou_min: std_logic;     
 
 signal inc_seg, inc_min: std_logic := '0';
+-- '1' = contagem dos segundos liberada (so muda com seg(0) = '0', para nao gerar borda falsa)
+signal conta: std_logic := '1';
 -- Clock da unidade dos segundos/minutos: contagem normal XOR pulso de incremento
 signal clk_segUni, clk_minUni: std_logic;
 
@@ -80,12 +80,15 @@ begin
 	if rising_edge(CLOCK_50) then
 		inc_seg  <= apertou_seg  and ehkey(7);
 		inc_min <= apertou_min and ehkey(7);
+		if seg(0) = '0' then
+			conta <= not ehkey(7);
+		end if;
 	end if;
 end process;
 
 -- O pulso de incremento passado por XOR no clock gera exatamente
 -- uma borda de descida, no caso essa borda depois é utilizada no FF seg e min em cascata presente.
-clk_segUni  <= saidaseg(5) xor inc_seg;
+clk_segUni  <= (seg(0) and conta) xor inc_seg;
 clk_minUni <= segDez(2)   xor inc_min;
 
 
@@ -102,8 +105,6 @@ port map(J => '1', K => '1', Clk => seg(1), Clr => '1',	Q => saida(0));
 FLIP_FLOP1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saida(0),Clr => '1', Q => saida(1));
 
-
-
 -- Condicoes de zerar registradas no CLOCK_50: o clear fica ativo por pelo menos 1 ciclo,
 -- ate todos os bits estarem em 0. Com o clear combinacional ele sumia assim que o bit 1
 -- zerava, e a borda de descida do bit 1 ainda fazia o bit 2 virar (9 -> 10 mostrava 4).
@@ -112,12 +113,12 @@ begin
 	if rising_edge(CLOCK_50) then
 		zera_segUni <= segUni(3) and segUni(1); -- chegou em 10
 		zera_segDez <= segDez(2) and segDez(1); -- chegou em 6
-		zera_minDez    <= minDez(1) and minDez(2); -- chegou em 6
-		zera_minUni <= (minUni(3) and minUni(1)); -- chegou em 10 ou 24
+		zera_minDez <= minDez(2) and minDez(1); -- chegou em 6
+		zera_minUni <= minUni(3) and minUni(1); -- chegou em 10
 	end if;
 end process;
 
--- UNIDADE DOS SEGUNDOS: 0 a 9, clock = saidaseg(5) (cai na virada 59 -> 0 s) ou aperto de ehkey(8)
+-- UNIDADE DOS SEGUNDOS: 0 a 9, clock = seg(0) (1 Hz, parado no ajuste) ou aperto de ehkey(8)
 segUniClr <= (not zera_segUni);
 
 segUniC0: entity work.Flip_Flop_JK
@@ -151,7 +152,7 @@ port map(J => '1', K => '1', Clk => minUni(1), Clr => minUniClr, Q => minUni(2))
 minUniC3: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => minUni(2), Clr => minUniClr, Q => minUni(3));
 
--- DEZENA DOS MINUTOS: 0 a 6, clock = minUni(3) (cai na virada 9 -> 0)
+-- DEZENA DOS MINUTOS: 0 a 5, clock = minUni(3) (cai na virada 9 -> 0)
 minDezClr <= (not zera_minDez);
 
 minDezC0: entity work.Flip_Flop_JK
