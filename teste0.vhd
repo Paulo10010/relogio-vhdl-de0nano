@@ -3,7 +3,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
-entity teste0 is
+entity teste1 is
 	port
 	(
 	   -- ENTRADAS FISICAS!
@@ -26,10 +26,10 @@ entity teste0 is
 		d7seg : out std_logic_vector(8 downto 0) -- Indicator de 7seg selecionado por dig7seg
 
 	);
-end teste0;
+end teste1;
 
 
-architecture behaviorOfTest of teste0 is
+architecture behaviorOfTest of teste1 is
 --Colocar aqui todas os sinais que deseja utilizar("equivalentes a variaveis auxiliares")
 --Exemplos de declaração de sinal:
 --signal var_auxiliar: std_logic;
@@ -44,18 +44,17 @@ signal rst_segundos: std_logic;
 signal segUni  : std_logic_vector(3 downto 0); -- 0 a 9
 signal segDez  : std_logic_vector(2 downto 0); -- 0 a 5
 signal minUni : std_logic_vector(3 downto 0); -- 0 a 9
-signal minDez : std_logic_vector(1 downto 0); -- 0 a 2
+signal minDez : std_logic_vector(2 downto 0); -- 0 a 6
 signal segUni4, segDez4, minUni4, minDez4: std_logic_vector(3 downto 0); -- digitos em 4 bits para o bin_7seg
 
 -- Clear (ativo em '0') de cada JK
-signal segUniClr  : std_logic_vector(3 downto 0);
-signal segDezClr  : std_logic_vector(2 downto 0);
-signal minUniClr : std_logic_vector(3 downto 0);
-signal minDezClr : std_logic_vector(1 downto 0);
+signal segUniClr  : std_logic;
+signal segDezClr  : std_logic;
+signal minUniClr : std_logic;
+signal minDezClr : std_logic;
 
 -- Condicoes de zerar a contagem (vira de 9->0, 5->0 e 23->00)
-signal zera_segUni, zera_segDez, zera_24h: std_logic := '0';
-signal zera_minUni: std_logic := '0';
+signal zera_segUni, zera_segDez, zera_minUni, zera_minDez: std_logic := '0';
 
 -- Botoes ehkey(8)/ehkey(9) pós filtro
 signal bot_seg_db, bot_min_db: std_logic;       
@@ -103,21 +102,6 @@ port map(J => '1', K => '1', Clk => seg(1), Clr => '1',	Q => saida(0));
 FLIP_FLOP1: entity work.Flip_Flop_JK
 port map(J => '1', K => '1', Clk => saida(0),Clr => '1', Q => saida(1));
 
--- Os segundos zeram ao chegar em 60 e ficam parados em 00 durante o ajuste.
-rst_segundos <= not ((saidaseg(5) and saidaseg(4) and saidaseg(3) and saidaseg(2)) or ehkey(7));
--- contagem de 0 a 60.
-segundoC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => seg(0), Clr => rst_segundos,	Q => saidaseg(0));
-segundoC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saidaseg(0), Clr => rst_segundos,	Q => saidaseg(1));
-segundoC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saidaseg(1), Clr => rst_segundos,	Q => saidaseg(2));
-segundoC3: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saidaseg(2), Clr => rst_segundos, 	Q => saidaseg(3));
-segundoC4: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saidaseg(3), Clr => rst_segundos,	Q => saidaseg(4));
-segundoC5: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => saidaseg(4), Clr => rst_segundos,	Q => saidaseg(5));
 
 
 -- Condicoes de zerar registradas no CLOCK_50: o clear fica ativo por pelo menos 1 ciclo,
@@ -128,59 +112,61 @@ begin
 	if rising_edge(CLOCK_50) then
 		zera_segUni <= segUni(3) and segUni(1); -- chegou em 10
 		zera_segDez <= segDez(2) and segDez(1); -- chegou em 6
-		zera_24h    <= minDez(1) and minUni(2); -- chegou em 24
-		zera_minUni <= (minUni(3) and minUni(1)) or (minDez(1) and minUni(2)); -- chegou em 10 ou 24
+		zera_minDez    <= minDez(1) and minDez(2); -- chegou em 6
+		zera_minUni <= (minUni(3) and minUni(1)); -- chegou em 10 ou 24
 	end if;
 end process;
 
 -- UNIDADE DOS SEGUNDOS: 0 a 9, clock = saidaseg(5) (cai na virada 59 -> 0 s) ou aperto de ehkey(8)
-segUniClr <= (others => not zera_segUni);
+segUniClr <= (not zera_segUni);
 
 segUniC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => clk_segUni,  Clr => segUniClr(0), Q => segUni(0));
+port map(J => '1', K => '1', Clk => clk_segUni,  Clr => segUniClr, Q => segUni(0));
 segUniC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => segUni(0),   Clr => segUniClr(1), Q => segUni(1));
+port map(J => '1', K => '1', Clk => segUni(0),   Clr => segUniClr, Q => segUni(1));
 segUniC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => segUni(1),   Clr => segUniClr(2), Q => segUni(2));
+port map(J => '1', K => '1', Clk => segUni(1),   Clr => segUniClr, Q => segUni(2));
 segUniC3: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => segUni(2),   Clr => segUniClr(3), Q => segUni(3));
+port map(J => '1', K => '1', Clk => segUni(2),   Clr => segUniClr, Q => segUni(3));
 
 -- DEZENA DOS SEGUNDOS: 0 a 5, clock = segUni(3) (cai na virada 9 -> 0)
-segDezClr <= (others => not zera_segDez);
+segDezClr <= ( not zera_segDez);
 
 segDezC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => segUni(3), Clr => segDezClr(0), Q => segDez(0));
+port map(J => '1', K => '1', Clk => segUni(3), Clr => segDezClr, Q => segDez(0));
 segDezC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => segDez(0), Clr => segDezClr(1), Q => segDez(1));
+port map(J => '1', K => '1', Clk => segDez(0), Clr => segDezClr, Q => segDez(1));
 segDezC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => segDez(1), Clr => segDezClr(2), Q => segDez(2));
+port map(J => '1', K => '1', Clk => segDez(1), Clr => segDezClr, Q => segDez(2));
 
 -- UNIDADE DOS MINUTOS: 0 a 9, clock = segDez(2) (cai na virada 59 -> 00 seg) ou aperto de ehkey(9)
-minUniClr <= (others => not zera_minUni);
+minUniClr <= (not zera_minUni);
 
 minUniC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => clk_minUni, Clr => minUniClr(0), Q => minUni(0));
+port map(J => '1', K => '1', Clk => clk_minUni, Clr => minUniClr, Q => minUni(0));
 minUniC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(0), Clr => minUniClr(1), Q => minUni(1));
+port map(J => '1', K => '1', Clk => minUni(0), Clr => minUniClr, Q => minUni(1));
 minUniC2: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(1), Clr => minUniClr(2), Q => minUni(2));
+port map(J => '1', K => '1', Clk => minUni(1), Clr => minUniClr, Q => minUni(2));
 minUniC3: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(2), Clr => minUniClr(3), Q => minUni(3));
+port map(J => '1', K => '1', Clk => minUni(2), Clr => minUniClr, Q => minUni(3));
 
--- DEZENA DOS MINUTOS: 0 a 2, clock = minUni(3) (cai na virada 9 -> 0)
-minDezClr <= (others => not zera_24h);
+-- DEZENA DOS MINUTOS: 0 a 6, clock = minUni(3) (cai na virada 9 -> 0)
+minDezClr <= (not zera_minDez);
 
 minDezC0: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minUni(3), Clr => minDezClr(0), Q => minDez(0));
+port map(J => '1', K => '1', Clk => minUni(3), Clr => minDezClr, Q => minDez(0));
 minDezC1: entity work.Flip_Flop_JK
-port map(J => '1', K => '1', Clk => minDez(0), Clr => minDezClr(1), Q => minDez(1));
+port map(J => '1', K => '1', Clk => minDez(0), Clr => minDezClr, Q => minDez(1));
+minDezC2: entity work.Flip_Flop_JK
+port map(J => '1', K => '1', Clk => minDez(1), Clr => minDezClr, Q => minDez(2));
 
 
 -- Digitos para o display (bin_7seg apaga o digito se o valor for invalido, e ajusta para todos os vetores possuam 4 bits.
 segUni4  <= segUni;
 segDez4  <= '0' & segDez;
 minUni4 <= minUni;
-minDez4 <= "00" & minDez;
+minDez4 <= '0' & minDez;
 
 BCDsegUni: entity work.bin_7seg
 port map (bin => segUni4, seg => segBCDUni);
